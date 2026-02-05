@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>0xSWG // ARCHITECT_CORE</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;700&display=swap" rel="stylesheet">
+    <style>
+        /* HINDRER MARKERING PÅ HELE SIDEN */
+        body { 
+            margin: 0; 
+            background: #010203; 
+            color: #fff; 
+            font-family: 'JetBrains Mono', monospace; 
+            overflow: hidden; 
+            height: 100vh;
+            user-select: none; 
+            -webkit-user-select: none;
+        }
+        
+        /* TILLATER MARKERING KUN I VINDUER OG TERMINAL HVIS ØNSKELIG */
+        .window-content, #term-history {
+            user-select: text;
+            -webkit-user-select: text;
+        }
+
+        /* Minimalist Loading Screen */
+        #boot-screen {
+            position: fixed; inset: 0; background: #000; z-index: 9999;
+            display: flex; flex-direction: column; justify-content: center; align-items: center;
+        }
+        .load-container { width: 200px; }
+        .load-bar { width: 0%; height: 2px; background: #00f7ff; box-shadow: 0 0 15px #00f7ff; }
+        .load-text { font-size: 8px; text-transform: uppercase; letter-spacing: 0.4em; color: rgba(0, 247, 255, 0.5); margin-top: 15px; }
+
+        #canvas-mesh { position: fixed; inset: 0; z-index: 1; opacity: 1; pointer-events: none; }
+        #desktop { position: relative; z-index: 10; width: 100vw; height: 100vh; padding: 60px; visibility: hidden; opacity: 0; }
+
+        .window {
+            position: absolute; background: rgba(8, 12, 16, 0.95);
+            border: 1px solid rgba(0, 247, 255, 0.2); border-radius: 12px;
+            backdrop-filter: blur(40px); display: none; flex-direction: column; overflow: hidden;
+            box-shadow: none;
+        }
+        .window-header { 
+            padding: 12px 18px; background: rgba(255,255,255,0.03); 
+            display: flex; justify-content: space-between; align-items: center; 
+            cursor: grab; border-bottom: 1px solid rgba(255,255,255,0.05);
+        }
+        .window-content { padding: 25px; font-size: 13px; color: #b0b0b0; line-height: 1.7; overflow-y: auto; }
+
+        #term-scroll-area { height: 350px; overflow-y: auto; display: flex; flex-direction: column; scrollbar-width: none; -ms-overflow-style: none; }
+        #term-scroll-area::-webkit-scrollbar { display: none; }
+        #term-history { flex-grow: 1; display: flex; flex-direction: column; justify-content: flex-end; }
+
+        .btn-close { width: 12px; height: 12px; border-radius: 50%; background: #ff5f56; cursor: pointer; transition: 0.2s; }
+        .btn-close:hover { background: #ff2e22; box-shadow: 0 0 8px #ff5f56; }
+
+        /* App Icons - SHINY GLOW EFFECT */
+        .app-icon { width: 80px; margin-bottom: 30px; cursor: pointer; display: flex; flex-direction: column; align-items: center; position: relative; }
+        .icon-box {
+            width: 55px; height: 55px; background: rgba(255, 255, 255, 0.02);
+            border: 1px solid rgba(255,255,255,0.08); border-radius: 14px;
+            display: flex; align-items: center; justify-content: center; font-size: 24px;
+            transition: all 0.4s cubic-bezier(0.165, 0.84, 0.44, 1); margin-bottom: 8px;
+        }
+        .app-icon:hover .icon-box { 
+            background: rgba(0, 247, 255, 0.05); 
+            border-color: rgba(0, 247, 255, 0.6); 
+            box-shadow: 0 0 20px rgba(0, 247, 255, 0.15);
+            transform: scale(1.05);
+        }
+        .app-icon:active .icon-box { transform: scale(0.95); }
+
+        #taskbar {
+            position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%);
+            background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.1);
+            padding: 10px 15px; border-radius: 20px; backdrop-filter: blur(30px);
+            display: flex; gap: 12px; z-index: 200; opacity: 0;
+        }
+        .dock-item {
+            width: 44px; height: 44px; background: rgba(255,255,255,0.04);
+            border-radius: 12px; display: flex; align-items: center; justify-content: center;
+            cursor: pointer; transition: 0.3s; font-size: 20px;
+        }
+        .dock-item:hover { transform: translateY(-8px); background: rgba(0, 247, 255, 0.1); }
+
+        .project-card {
+            padding: 18px; border: 1px solid rgba(255,255,255,0.05); border-radius: 10px;
+            background: rgba(255,255,255,0.01); cursor: pointer; transition: 0.3s; margin-bottom: 12px;
+        }
+        .project-card:hover { border-color: rgba(0, 247, 255, 0.4); background: rgba(0, 247, 255, 0.03); }
+        .project-card span { color: white; font-weight: bold; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; }
+
+        /* KLOKKE STIL */
+        #clock-tray {
+            position: fixed; bottom: 35px; right: 40px; 
+            z-index: 100; font-size: 14px; font-weight: 700;
+            color: #00f7ff; opacity: 0.35; letter-spacing: 1px;
+            pointer-events: none; visibility: hidden;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="boot-screen">
+        <div class="load-container">
+            <div class="load-bar" id="load-bar"></div>
+        </div>
+        <div class="load-text" id="load-status">Initialising...</div>
+    </div>
+
+    <canvas id="canvas-mesh"></canvas>
+    
+    <div id="desktop">
+        <div class="app-icon" onclick="toggleWindow('win-bio')">
+            <div class="icon-box">🧬</div>
+            <span class="text-[9px] uppercase tracking-widest opacity-40">Identity</span>
+        </div>
+        <div class="app-icon" onclick="toggleWindow('win-projects')">
+            <div class="icon-box">📁</div>
+            <span class="text-[9px] uppercase tracking-widest opacity-40">Creations</span>
+        </div>
+        <div class="app-icon" onclick="toggleWindow('win-terminal')">
+            <div class="icon-box">📟</div>
+            <span class="text-[9px] uppercase tracking-widest opacity-40">Terminal</span>
+        </div>
+
+        <div id="win-bio" class="window" style="top: 15%; left: 45%; width: 400px;">
+            <div class="window-header">
+                <div class="btn-close" onclick="closeWindow('win-bio')"></div>
+                <span class="text-[9px] font-bold opacity-30 tracking-widest">USER_PROFILE</span>
+                <div style="width: 12px"></div>
+            </div>
+            <div class="window-content">
+                <h1 class="text-xl font-bold text-white mb-2 uppercase">The Subject</h1>
+                <p class="text-xs text-gray-500 mb-4 italic">IT Automation and Optimization</p>
+                <div class="space-y-4 border-t border-white/10 pt-4 text-[11px]">
+                    <p>> Deploying scalable AI powered Websites for Tier-1 institutions.</p>
+                    <p>> Specialized in C#, HTML, CSS, Next.js and system level windows optimization.</p>
+                </div>
+            </div>
+        </div>
+
+        <div id="win-terminal" class="window" style="top: 20%; left: 20%; width: 650px;">
+            <div class="window-header">
+                <div class="btn-close" onclick="closeWindow('win-terminal')"></div>
+                <span class="text-[9px] font-bold opacity-30 tracking-widest">SYSTEM_BASH_V6.2</span>
+                <div style="width: 12px"></div>
+            </div>
+            <div class="window-content font-mono text-cyan-500" id="term-scroll-area">
+                <div id="term-history"></div>
+                <div class="flex mt-2">
+                    <span class="mr-2 opacity-40">root@0xswg:~$</span>
+                    <input type="text" id="term-input" class="bg-transparent border-none outline-none text-white w-full" autocomplete="off">
+                </div>
+            </div>
+        </div>
+
+        <div id="win-projects" class="window" style="top: 35%; left: 10%; width: 450px;">
+            <div class="window-header">
+                <div class="btn-close" onclick="closeWindow('win-projects')"></div>
+                <span class="text-[9px] font-bold opacity-30 tracking-widest">PROJECT_CREATIONS</span>
+                <div style="width: 12px"></div>
+            </div>
+            <div class="window-content">
+                <div class="project-card" onclick="window.open('https://github.com/0xswg', '_blank')">
+                    <span>01 // PROJECT_GITHUB</span>
+                </div>
+                <div class="project-card" onclick="window.open('https://github.com/0xswg', '_blank')">
+                    <span>02 // PROJECT_RIP</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="clock-tray">00:00:00</div>
+
+    <div id="taskbar">
+        <div class="dock-item" onclick="toggleWindow('win-bio')">👤</div>
+        <div class="dock-item" onclick="toggleWindow('win-projects')">📁</div>
+        <div class="dock-item" onclick="toggleWindow('win-terminal')">📟</div>
+    </div>
+
+    <script>
+        function updateClock() {
+            const now = new Date();
+            document.getElementById('clock-tray').innerText = now.toLocaleTimeString('en-GB', { hour12: false });
+        }
+        setInterval(updateClock, 1000);
+        updateClock();
+
+        function runBoot() {
+            const bar = document.getElementById('load-bar');
+            const status = document.getElementById('load-status');
+            
+            gsap.to(bar, { 
+                width: "100%", 
+                duration: 2.5, 
+                ease: "power4.inOut",
+                onUpdate: function() {
+                    const p = Math.round(this.progress() * 100);
+                    if(p > 80) status.textContent = "Finalising...";
+                    else if(p > 40) status.textContent = "Loading Assets...";
+                },
+                onComplete: () => {
+                    status.textContent = "0xswg Ready";
+                    gsap.to("#boot-screen", { opacity: 0, duration: 1, delay: 0.5, onComplete: () => {
+                        document.getElementById('boot-screen').style.display = 'none';
+                        revealDesktop();
+                    }});
+                }
+            });
+        }
+
+        function revealDesktop() {
+            const desktop = document.getElementById('desktop');
+            const taskbar = document.getElementById('taskbar');
+            const clock = document.getElementById('clock-tray');
+            desktop.style.visibility = 'visible';
+            clock.style.visibility = 'visible';
+            initMesh(); 
+            drawMesh();
+            
+            gsap.to([desktop, taskbar, clock], { opacity: (i, el) => el === clock ? 0.35 : 1, duration: 1.2, ease: "power2.out" });
+        }
+
+        window.onload = runBoot;
+
+        let topZ = 100;
+        const canvas = document.getElementById('canvas-mesh');
+        const ctx = canvas.getContext('2d');
+        let points = [];
+        let mouse = { x: null, y: null };
+
+        function initMesh() {
+            canvas.width = window.innerWidth; canvas.height = window.innerHeight;
+            points = [];
+            for(let i=0; i<80; i++) points.push({ x: Math.random()*canvas.width, y: Math.random()*canvas.height, vx: (Math.random()-0.5)*0.3, vy: (Math.random()-0.5)*0.3 });
+        }
+
+        window.addEventListener('mousemove', (e) => { mouse.x = e.clientX; mouse.y = e.clientY; });
+
+        function drawMesh() {
+            ctx.clearRect(0,0,canvas.width, canvas.height);
+            points.forEach((p, i) => {
+                p.x += p.vx; p.y += p.vy;
+                if(p.x < 0 || p.x > canvas.width) p.vx *= -1;
+                if(p.y < 0 || p.y > canvas.height) p.vy *= -1;
+
+                if (mouse.x) {
+                    const dx = mouse.x - p.x; const dy = mouse.y - p.y;
+                    const dist = Math.hypot(dx, dy);
+                    if (dist < 250) { // Økt radius
+                        ctx.strokeStyle = `rgba(0, 247, 255, ${0.5 * (1 - dist / 250)})`; // Økt styrke (0.5)
+                        ctx.lineWidth = 1.2; // Tykkere strek
+                        ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(mouse.x, mouse.y); ctx.stroke();
+                    }
+                }
+                for(let j=i+1; j<points.length; j++) {
+                    const d = Math.hypot(p.x - points[j].x, p.y - points[j].y);
+                    if(d < 180) { // Økt koblingsavstand
+                        ctx.strokeStyle = `rgba(0, 247, 255, ${0.3 * (1 - d / 180)})`; // Økt styrke (0.3)
+                        ctx.lineWidth = 0.8;
+                        ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(points[j].x, points[j].y); ctx.stroke();
+                    }
+                }
+            });
+            requestAnimationFrame(drawMesh);
+        }
+
+        function toggleWindow(id) {
+            const win = document.getElementById(id);
+            if (win.style.display === 'flex') { closeWindow(id); } 
+            else {
+                if(id === 'win-terminal') document.getElementById('term-history').innerHTML = "0xswg Terminal Initialized.<br>Type 'help' to start.<br><br>";
+                win.style.display = 'flex';
+                bringToFront(win);
+                gsap.fromTo(win, { scale: 0.96, opacity: 0 }, { scale: 1, opacity: 1, duration: 0.3 });
+                if(id === 'win-terminal') document.getElementById('term-input').focus();
+            }
+        }
+        function closeWindow(id) {
+            gsap.to(document.getElementById(id), { scale: 0.96, opacity: 0, duration: 0.2, onComplete: () => document.getElementById(id).style.display = 'none' });
+        }
+        function bringToFront(win) { win.style.zIndex = ++topZ; }
+
+        document.querySelectorAll('.window').forEach(win => {
+            win.onmousedown = () => bringToFront(win);
+            win.querySelector('.window-header').onmousedown = (e) => {
+                if(e.target.classList.contains('btn-close')) return;
+                let sx = e.clientX - win.offsetLeft, sy = e.clientY - win.offsetTop;
+                document.onmousemove = (e) => { win.style.left = e.clientX-sx+'px'; win.style.top = e.clientY-sy+'px'; };
+                document.onmouseup = () => document.onmousemove = null;
+            };
+        });
+
+        const tIn = document.getElementById('term-input');
+        const tHistory = document.getElementById('term-history');
+        const tScroll = document.getElementById('term-scroll-area');
+
+        tIn.onkeydown = (e) => {
+            if (e.key === 'Enter') {
+                const cmd = tIn.value.toLowerCase().trim();
+                const div = document.createElement('div');
+                div.innerHTML = `<span class="opacity-30">root@0xswg:~$</span> ${tIn.value}`;
+                tHistory.appendChild(div);
+                if (cmd === 'help') {
+                    const r = document.createElement('div');
+                    r.innerHTML = "Commands: bio, projects, clear, exit";
+                    tHistory.appendChild(r);
+                } 
+                else if (cmd === 'clear') tHistory.innerHTML = "";
+                else if (cmd === 'bio') toggleWindow('win-bio');
+                else if (cmd === 'projects') toggleWindow('win-projects');
+                else if (cmd === 'exit') closeWindow('win-terminal');
+                tIn.value = "";
+                setTimeout(() => { tScroll.scrollTop = tScroll.scrollHeight; }, 10);
+            }
+        };
+        window.onresize = initMesh;
+    </script>
+</body>
+</html>
